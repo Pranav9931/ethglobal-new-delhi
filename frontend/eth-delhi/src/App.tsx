@@ -1,7 +1,11 @@
-import { usePrivy, useWallets } from "@privy-io/react-auth";
+import React, { useState, useEffect } from "react";
+import { Buffer } from "buffer";
+import { usePrivy, useWallets, useSessionSigners } from "@privy-io/react-auth";
 import { LoginWithEmail } from "./components";
-import { useState, useEffect } from "react";
 import { ethers } from "ethers";
+
+// Polyfill Buffer globally for Privy SDK
+window.Buffer = Buffer;
 
 const PYUSD_ADDRESS = "0x6c3ea9036406852006290770bedfcaba0e23a0e8";
 const ERC20_ABI = [
@@ -9,13 +13,16 @@ const ERC20_ABI = [
   "function decimals() view returns (uint8)"
 ];
 
+const backendSignerId = "jgnudaohe27wths41piqaizd";
+
 function App() {
   const { ready, authenticated, user, logout } = usePrivy();
   const { wallets } = useWallets();
+  const { addSessionSigners } = useSessionSigners();
 
-  // Balance states as string or null
   const [ethBalance, setEthBalance] = useState<string | null>(null);
   const [pyusdBalance, setPyusdBalance] = useState<string | null>(null);
+  const [backendSignerAdded, setBackendSignerAdded] = useState(false);
 
   useEffect(() => {
     async function fetchBalances() {
@@ -23,11 +30,11 @@ function App() {
         const provider = new ethers.BrowserProvider(await wallets[0].getEthereumProvider());
         const address = wallets[0].address;
 
-        // ETH
+        // Fetch ETH balance
         const ethWei = await provider.getBalance(address);
         setEthBalance(ethers.formatEther(ethWei));
 
-        // PYUSD
+        // Fetch PYUSD balance
         const pyusdContract = new ethers.Contract(PYUSD_ADDRESS, ERC20_ABI, provider);
         const rawPyusd = await pyusdContract.balanceOf(address);
         const decimals = await pyusdContract.decimals();
@@ -37,15 +44,35 @@ function App() {
     fetchBalances();
   }, [ready, authenticated, wallets]);
 
+  // Add backend signer session after wallet setup
+  // useEffect(() => {
+  //   async function addBackendSignerToWallet() {
+  //     if (!backendSignerAdded && ready && authenticated && wallets && wallets.length > 0) {
+  //       try {
+  //         await addSessionSigners({
+  //           address: wallets[0].address,
+  //           signers: [{ signerId: backendSignerId, policyIds: [] }] // no policy restrictions
+  //         });
+  //         setBackendSignerAdded(true);
+  //         console.log("Backend signer added successfully");
+  //       } catch (error) {
+  //         console.error("Failed to add backend signer:", error);
+  //       }
+  //     }
+  //   }
+  //   addBackendSignerToWallet();
+  // }, [ready, authenticated, wallets, backendSignerAdded, addSessionSigners]);
+
   if (!ready) return <div>Loading...</div>;
-  if (!(ready && authenticated)) return <LoginWithEmail />;
+  if (!authenticated) return <LoginWithEmail />;
 
   return (
     <div>
       <div>Hello, {user?.email?.address}</div>
-      <div>Wallet Address: {wallets && wallets[0] && wallets[0].address}</div>
+      <div>Wallet Address: {wallets?.[0]?.address ?? "N/A"}</div>
       <div>ETH Balance: {ethBalance ?? "..."}</div>
       <div>PYUSD Balance: {pyusdBalance ?? "..."}</div>
+      {/* <div>Backend Signer Added? {backendSignerAdded ? "YES" : "NO"}</div> */}
       <button onClick={logout} disabled={!ready || !authenticated}>Log out</button>
     </div>
   );
